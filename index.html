@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Invincible Reader</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #080808; --surface: #121212; --surface2: #1c1c1c;
+    --border: #242424; --accent: #e8c840; --accent2: #f0d060;
+    --text: #efefef; --muted: #505050; --danger: #e84040;
+    --green: #3aaa5a;
+  }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; touch-action: none; }
+
+  /* ── LANDING ── */
+  #landing {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; height: 100%; gap: 36px; padding: 24px; text-align: center;
+    background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(232,200,64,0.07) 0%, transparent 70%);
+  }
+  .logo { font-family:'Bebas Neue',sans-serif; font-size:clamp(56px,16vw,100px); letter-spacing:6px; line-height:1; color:var(--accent); text-shadow:0 0 80px rgba(232,200,64,0.4); }
+  .sub  { font-size:11px; letter-spacing:4px; text-transform:uppercase; color:var(--muted); margin-top:-8px; }
+  .drop-zone {
+    width:100%; max-width:400px; border:2px dashed var(--border); border-radius:14px;
+    padding:44px 28px; cursor:pointer; transition:border-color .2s,background .2s; position:relative;
+  }
+  .drop-zone:hover,.drop-zone.drag-over { border-color:var(--accent); background:rgba(232,200,64,.05); }
+  .drop-zone input { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+  .drop-icon { font-size:40px; margin-bottom:14px; }
+  .drop-text { font-size:15px; font-weight:600; margin-bottom:6px; }
+  .drop-hint { font-size:12px; color:var(--muted); }
+
+  /* ── PRELOAD SCREEN ── */
+  #preload-screen {
+    display:none; position:fixed; inset:0; z-index:200; background:var(--bg);
+    flex-direction:column; align-items:center; justify-content:center; gap:28px; padding:40px; text-align:center;
+  }
+  #preload-screen.show { display:flex; }
+  .preload-title { font-family:'Bebas Neue',sans-serif; font-size:clamp(20px,6vw,30px); letter-spacing:2px; color:var(--accent); max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .preload-bar-wrap { width:100%; max-width:340px; background:var(--border); border-radius:4px; height:6px; overflow:hidden; }
+  #preload-bar { height:100%; width:0%; background:var(--accent); border-radius:4px; transition:width .08s linear; }
+  #preload-label { font-size:12px; color:var(--muted); }
+  .preload-sub { font-size:12px; color:var(--muted); max-width:260px; line-height:1.7; }
+
+  /* ── READER ── */
+  #reader { display:none; flex-direction:column; height:100%; overflow:hidden; }
+
+  #topbar {
+    display:flex; align-items:center; padding:10px 14px;
+    background:var(--surface); border-bottom:1px solid var(--border);
+    flex-shrink:0; gap:10px; z-index:10;
+  }
+  #issue-title { font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:1px; color:var(--accent); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; }
+  #page-counter { font-size:11px; color:var(--muted); white-space:nowrap; flex-shrink:0; }
+  .zoom-btn { background:none; border:1px solid var(--border); color:var(--text); border-radius:6px; width:28px; height:28px; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:border-color .15s,color .15s; font-family:'Inter',sans-serif; }
+  .zoom-btn:hover { border-color:var(--accent); color:var(--accent); }
+  #close-btn { background:none; border:none; color:var(--muted); font-size:19px; cursor:pointer; padding:4px; line-height:1; flex-shrink:0; }
+  #close-btn:hover { color:var(--text); }
+
+  /* ── CANVAS WRAPPER ── */
+  #canvas-wrapper {
+    flex:1; overflow:hidden; display:flex; align-items:center; justify-content:center;
+    position:relative; background:var(--bg); user-select:none; -webkit-user-select:none;
+  }
+  #zoom-layer { position:relative; display:flex; align-items:center; justify-content:center; transform-origin:center center; will-change:transform; }
+  #zoom-layer.smooth { transition:transform .25s cubic-bezier(.25,.46,.45,.94); }
+  #comic-canvas { display:block; max-width:100%; max-height:100%; box-shadow:0 0 60px rgba(0,0,0,.9); }
+
+  /* Zoom badge & reset */
+  #zoom-badge { position:absolute; top:12px; right:12px; background:rgba(0,0,0,.7); color:var(--accent); font-family:'Bebas Neue',sans-serif; font-size:16px; letter-spacing:1px; padding:4px 10px; border-radius:20px; pointer-events:none; opacity:0; transition:opacity .2s; z-index:10; }
+  #zoom-badge.show { opacity:1; }
+  #zoom-reset { position:absolute; bottom:14px; right:14px; background:rgba(0,0,0,.75); border:1px solid var(--border); color:var(--text); font-family:'Inter',sans-serif; font-size:12px; border-radius:20px; padding:6px 14px; cursor:pointer; z-index:10; opacity:0; pointer-events:none; transition:opacity .2s,border-color .15s; }
+  #zoom-reset.show { opacity:1; pointer-events:auto; }
+  #zoom-reset:hover { border-color:var(--accent); color:var(--accent); }
+
+  /* Spinner */
+  #page-spinner { display:none; position:absolute; inset:0; align-items:center; justify-content:center; background:var(--bg); z-index:4; }
+  #page-spinner.show { display:flex; }
+  .spinner { width:32px; height:32px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* ── BOTTOMBAR ── */
+  #bottombar { display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--surface); border-top:1px solid var(--border); flex-shrink:0; }
+  .nav-btn { background:none; border:1px solid var(--border); color:var(--text); border-radius:8px; padding:7px 14px; font-size:15px; font-family:'Inter',sans-serif; cursor:pointer; transition:border-color .15s,color .15s; flex-shrink:0; }
+  .nav-btn:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+  .nav-btn:disabled { opacity:.2; cursor:default; }
+  #progress-bar { flex:1; height:4px; background:var(--border); border-radius:2px; cursor:pointer; position:relative; }
+  #progress-fill { height:100%; background:var(--accent); border-radius:2px; transition:width .15s; width:0%; }
+  #issues-btn { flex-shrink:0; font-size:11px; color:var(--muted); border:1px solid var(--border); border-radius:20px; padding:5px 12px; cursor:pointer; transition:border-color .15s,color .15s; background:none; font-family:'Inter',sans-serif; display:none; }
+  #issues-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+  /* ── ISSUE MODAL ── */
+  #issue-modal { display:none; position:fixed; inset:0; z-index:100; background:rgba(0,0,0,.88); align-items:flex-end; justify-content:center; }
+  #issue-modal.open { display:flex; }
+  #issue-panel { background:var(--surface); border-top:1px solid var(--border); border-radius:18px 18px 0 0; width:100%; max-width:520px; max-height:72vh; display:flex; flex-direction:column; overflow:hidden; }
+  .panel-head { display:flex; align-items:center; justify-content:space-between; padding:14px 16px 12px; border-bottom:1px solid var(--border); flex-shrink:0; gap:8px; }
+  .panel-head-title { font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:1px; color:var(--accent); }
+  .panel-head-actions { display:flex; gap:8px; flex-shrink:0; }
+
+  /* Panel buttons */
+  .panel-btn {
+    border:1px solid var(--border); color:var(--text); border-radius:8px;
+    padding:6px 12px; font-size:11px; font-weight:600; font-family:'Inter',sans-serif;
+    cursor:pointer; background:none; transition:border-color .15s,color .15s;
+    white-space:nowrap;
+  }
+  .panel-btn:hover { border-color:var(--accent); color:var(--accent); }
+  .panel-btn.primary { background:var(--accent); color:#000; border-color:var(--accent); position:relative; overflow:hidden; }
+  .panel-btn.primary input { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+  .panel-btn.primary:hover { background:var(--accent2); border-color:var(--accent2); }
+
+  /* Preload indicator strip */
+  #preload-strip { display:flex; gap:4px; padding:8px 16px 4px; flex-shrink:0; align-items:center; flex-wrap:wrap; }
+  .preload-dot { width:8px; height:8px; border-radius:50%; background:var(--border); flex-shrink:0; position:relative; }
+  .preload-dot.loaded   { background:var(--green); }
+  .preload-dot.loading  { background:var(--accent); animation:pulse .8s ease-in-out infinite alternate; }
+  .preload-dot.current  { background:var(--accent); width:10px; height:10px; box-shadow:0 0 6px var(--accent); }
+  .preload-dot-label    { font-size:10px; color:var(--muted); margin-right:4px; }
+  @keyframes pulse { from { opacity:.4; } to { opacity:1; } }
+
+  #issue-list { overflow-y:auto; flex:1; padding:8px 0; }
+  .issue-item { display:flex; align-items:center; padding:10px 16px; cursor:pointer; font-size:13px; transition:background .12s; gap:8px; }
+  .issue-item:hover { background:rgba(255,255,255,.04); }
+  .drag-handle { color:var(--muted); font-size:14px; cursor:grab; padding:2px 4px; flex-shrink:0; user-select:none; }
+  .drag-handle:active { cursor:grabbing; }
+  .issue-num { font-family:'Bebas Neue',sans-serif; font-size:15px; color:var(--muted); width:28px; text-align:right; flex-shrink:0; }
+  .issue-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+  .issue-loaded  { font-size:10px; color:var(--green); flex-shrink:0; }
+  .issue-loading { font-size:10px; color:var(--accent); flex-shrink:0; animation:pulse .8s ease-in-out infinite alternate; }
+  .issue-item.active .issue-name { color:var(--accent); }
+  .issue-item.active .issue-num  { color:var(--accent); }
+  .issue-delete { background:none; border:none; color:var(--muted); font-size:14px; cursor:pointer; padding:2px 6px; opacity:0; transition:opacity .15s,color .15s; flex-shrink:0; }
+  .issue-item:hover .issue-delete { opacity:1; }
+  .issue-delete:hover { color:var(--danger); }
+  .issue-item.dragging { opacity:.35; }
+  .issue-item.drag-over-item { border-top:2px solid var(--accent); }
+
+  /* Animations */
+  @keyframes slideLeft  { from { opacity:0; transform:translateX(32px); } to { opacity:1; transform:none; } }
+  @keyframes slideRight { from { opacity:0; transform:translateX(-32px); } to { opacity:1; transform:none; } }
+  .flip-left  { animation:slideLeft  .16s ease-out; }
+  .flip-right { animation:slideRight .16s ease-out; }
+  @keyframes fadeUp { from { opacity:0; transform:translate(-50%,8px); } to { opacity:1; transform:translate(-50%,0); } }
+
+  /* ── ICON UPLOAD ── */
+  #icon-area {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+  }
+  #icon-preview {
+    width: 80px; height: 80px; border-radius: 20px;
+    border: 2px dashed var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; cursor: pointer; position: relative; overflow: hidden;
+    transition: border-color .2s; flex-shrink: 0; background: var(--surface);
+  }
+  #icon-preview:hover { border-color: var(--accent); }
+  #icon-preview input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  #icon-preview img { width: 100%; height: 100%; object-fit: cover; border-radius: 18px; }
+  #icon-label { font-size: 11px; color: var(--muted); text-align: center; }
+
+  /* ── RESUME BUTTON ── */
+  #resume-btn {
+    display: none; flex-direction: column; align-items: center;
+    width: 100%; max-width: 400px;
+    background: var(--accent); color: #000; border: none; border-radius: 14px;
+    padding: 18px 24px; cursor: pointer; gap: 4px;
+    font-family: 'Inter', sans-serif;
+    box-shadow: 0 0 40px rgba(232,200,64,0.25);
+    transition: background .15s, transform .1s;
+  }
+  #resume-btn:active { transform: scale(0.98); }
+  #resume-btn:hover  { background: var(--accent2); }
+  #resume-btn-label  { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; opacity: 0.7; }
+  #resume-btn-title  { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 1px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #resume-btn-page   { font-size: 12px; opacity: 0.7; }
+  #resume-btn-cached { font-size: 10px; opacity: 0.5; }
+
+  .or-divider { font-size: 11px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
+</style>
+</head>
+<body>
+
+<!-- LANDING -->
+<div id="landing">
+  <div>
+    <div class="logo">INVINCIBLE</div>
+    <div class="sub">Comic Reader</div>
+  </div>
+
+  <button id="resume-btn">
+    <span id="resume-btn-label">▶ Weiterlesen</span>
+    <span id="resume-btn-title">—</span>
+    <span id="resume-btn-page">Seite —</span>
+    <span id="resume-btn-cached"></span>
+  </button>
+
+  <div class="or-divider" id="or-divider" style="display:none">oder</div>
+
+  <div class="drop-zone" id="drop-zone">
+    <input type="file" id="file-input" accept=".pdf" multiple>
+    <div class="drop-icon">📚</div>
+    <div class="drop-text">PDFs auswählen oder reinziehen</div>
+    <div class="drop-hint">Alle Issues auf einmal — werden automatisch sortiert</div>
+  </div>
+  <div id="icon-area">
+    <div id="icon-preview">
+      <input type="file" id="icon-input" accept="image/*">
+      <span id="icon-placeholder">🖼</span>
+    </div>
+    <div id="icon-label">App-Icon für Startbildschirm tippen zum Ändern</div>
+  </div>
+</div>
+
+<!-- PRELOAD SCREEN -->
+<div id="preload-screen">
+  <div class="preload-title" id="preload-title">Lade…</div>
+  <div class="preload-bar-wrap"><div id="preload-bar"></div></div>
+  <div id="preload-label">Seite 0 / 0</div>
+  <div class="preload-sub">Seiten werden in High Resolution geladen. Die nächsten 4 Issues werden danach im Hintergrund vorgeladen.</div>
+</div>
+
+<!-- READER -->
+<div id="reader">
+  <div id="topbar">
+    <div id="issue-title">—</div>
+    <div id="page-counter">1 / 1</div>
+    <button class="zoom-btn" id="zoom-out-btn">−</button>
+    <button class="zoom-btn" id="zoom-in-btn">+</button>
+    <button id="close-btn">✕</button>
+  </div>
+  <div id="canvas-wrapper">
+    <div id="zoom-layer"><canvas id="comic-canvas"></canvas></div>
+    <div id="page-spinner"><div class="spinner"></div></div>
+    <div id="zoom-badge">1×</div>
+    <button id="zoom-reset">↩ Reset Zoom</button>
+  </div>
+  <div id="bottombar">
+    <button class="nav-btn" id="prev-btn">‹</button>
+    <div id="progress-bar"><div id="progress-fill"></div></div>
+    <button class="nav-btn" id="next-btn">›</button>
+    <button id="issues-btn">☰ Issues</button>
+  </div>
+</div>
+
+<!-- ISSUE MODAL -->
+<div id="issue-modal">
+  <div id="issue-panel">
+    <div class="panel-head">
+      <div class="panel-head-title">Issues</div>
+      <div class="panel-head-actions">
+        <button class="panel-btn" id="sort-btn">⇅ Auto-Sort</button>
+        <button class="panel-btn primary" id="add-btn">
+          <input type="file" id="add-input" accept=".pdf" multiple>
+          + Hinzufügen
+        </button>
+      </div>
+    </div>
+    <div id="preload-strip"></div>
+    <div id="issue-list"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ─────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────
+const UNLOADED = null;
+const LOADING  = 'loading';
+
+const state = {
+  files: [],        // { name, issueNum, arrayBuffer, pageCache: null|'loading'|ImageBitmap[] }
+  fileIndex: 0,
+  pageNum: 1, totalPages: 1,
+  rendering: false, pendingPage: null,
+};
+
+const zoom = { scale:1, x:0, y:0, MIN:1, MAX:6 };
+
+// ─────────────────────────────────────────────────────────
+// ELEMENTS
+// ─────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const landing       = $('landing');
+const preloadScreen = $('preload-screen');
+const preloadBar    = $('preload-bar');
+const preloadLabel  = $('preload-label');
+const preloadTitle  = $('preload-title');
+const reader        = $('reader');
+const canvas        = $('comic-canvas');
+const ctx           = canvas.getContext('2d');
+const zoomLayer     = $('zoom-layer');
+const zoomBadge     = $('zoom-badge');
+const zoomReset     = $('zoom-reset');
+const issueTitle    = $('issue-title');
+const pageCounter   = $('page-counter');
+const prevBtn       = $('prev-btn');
+const nextBtn       = $('next-btn');
+const progressFill  = $('progress-fill');
+const pageSpinner   = $('page-spinner');
+const issuesBtn     = $('issues-btn');
+const issueModal    = $('issue-modal');
+const issueList     = $('issue-list');
+const preloadStrip  = $('preload-strip');
+const addInput      = $('add-input');
+const wrapper       = $('canvas-wrapper');
+
+// ─────────────────────────────────────────────────────────
+// ISSUE NUMBER EXTRACTION
+// ─────────────────────────────────────────────────────────
+function extractIssueNum(name) {
+  // "Invincible 065 (2009) (digital)" → 65
+  // "Invincible 001" → 1
+  // Try 3-digit zero-padded number first
+  let m = name.match(/\b(\d{3})\b/);
+  if (!m) m = name.match(/\b(\d{1,4})\b/);
+  return m ? parseInt(m[1], 10) : 9999;
+}
+
+// ─────────────────────────────────────────────────────────
+// SMART PRELOADING
+// ─────────────────────────────────────────────────────────
+const DPR  = Math.min(window.devicePixelRatio || 1, 3);
+const maxW = window.screen.width  * DPR;
+const maxH = window.screen.height * DPR;
+
+// Load a single issue's pages into cache.
+// onProgress(cur, total) called during blocking load.
+// Returns promise that resolves when done.
+async function loadIssueCache(idx, onProgress) {
+  const entry = state.files[idx];
+  if (!entry) return;
+  if (Array.isArray(entry.pageCache)) return;
+  if (entry.pageCache === LOADING) {
+    await new Promise(resolve => {
+      const check = setInterval(() => {
+        if (Array.isArray(state.files[idx].pageCache)) { clearInterval(check); resolve(); }
+      }, 80);
+    });
+    return;
+  }
+
+  entry.pageCache = LOADING;
+  updateIssueList();
+
+  const pdf   = await pdfjsLib.getDocument({ data: entry.arrayBuffer.slice(0) }).promise;
+  const total = pdf.numPages;
+
+  // Try loading pre-rendered pages from DB first
+  if (onProgress) onProgress(0, total);
+  const cached = await dbLoadPages(entry.name, total);
+  if (cached) {
+    entry.pageCache = cached;
+    if (onProgress) onProgress(total, total);
+    updateIssueList(); updatePreloadStrip();
+    return;
+  }
+
+  // Render from PDF, saving each page to DB
+  const cache = [];
+  for (let i = 0; i < total; i++) {
+    const page     = await pdf.getPage(i + 1);
+    const vp0      = page.getViewport({ scale: 1 });
+    const scale    = Math.min(maxW / vp0.width, maxH / vp0.height);
+    const viewport = page.getViewport({ scale });
+    const off      = document.createElement('canvas');
+    off.width = viewport.width; off.height = viewport.height;
+    await page.render({ canvasContext: off.getContext('2d'), viewport }).promise;
+
+    let bmp;
+    try   { bmp = await createImageBitmap(off); }
+    catch { bmp = off; }
+    cache.push(bmp);
+
+    // Save to DB asynchronously (don't await, keep rendering fast)
+    dbSavePage(entry.name, i, bmp).catch(() => {});
+
+    if (onProgress) onProgress(i + 1, total);
+  }
+
+  entry.pageCache = cache;
+  updateIssueList(); updatePreloadStrip();
+}
+
+// Background-load the next N issues silently
+const AHEAD = 4;
+function backgroundLoadAhead(fromIdx) {
+  for (let i = fromIdx + 1; i <= Math.min(fromIdx + AHEAD, state.files.length - 1); i++) {
+    if (!Array.isArray(state.files[i].pageCache)) {
+      loadIssueCache(i, null).catch(() => {});
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// FILE LOADING
+// ─────────────────────────────────────────────────────────
+$('file-input').addEventListener('change', e => initFiles(e.target.files));
+const dz = $('drop-zone');
+dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); initFiles(e.dataTransfer.files); });
+
+async function initFiles(fileList) {
+  if (!fileList.length) return;
+  for (const f of fileList) {
+    const ab   = await f.arrayBuffer();
+    const name = f.name.replace(/\.pdf$/i, '');
+    if (!state.files.find(x => x.name === name)) {
+      const entry = { name, issueNum: extractIssueNum(name), arrayBuffer: ab, pageCache: UNLOADED };
+      state.files.push(entry);
+      dbSave(entry);
+    }
+  }
+  autoSort();
+  await openIssue(0);
+}
+
+addInput.addEventListener('change', async e => {
+  let added = 0;
+  for (const f of e.target.files) {
+    const name = f.name.replace(/\.pdf$/i, '');
+    if (!state.files.find(x => x.name === name)) {
+      const ab = await f.arrayBuffer();
+      const entry = { name, issueNum: extractIssueNum(name), arrayBuffer: ab, pageCache: UNLOADED };
+      state.files.push(entry);
+      dbSave(entry);
+      added++;
+    }
+  }
+  addInput.value = '';
+  if (added) { autoSort(); showToast(`${added} Issue${added>1?'s':''} hinzugefügt & sortiert`); }
+  else showToast('Bereits alle vorhanden');
+  updateIssueList(); updatePreloadStrip();
+  issuesBtn.style.display = state.files.length >= 1 ? 'block' : 'none';
+});
+
+// ─────────────────────────────────────────────────────────
+// AUTO-SORT
+// ─────────────────────────────────────────────────────────
+function autoSort() {
+  // Remember current issue
+  const currentEntry = state.files[state.fileIndex];
+  state.files.sort((a, b) => a.issueNum - b.issueNum || a.name.localeCompare(b.name));
+  // Restore fileIndex
+  if (currentEntry) state.fileIndex = state.files.indexOf(currentEntry);
+  updateIssueList(); updatePreloadStrip();
+}
+
+$('sort-btn').addEventListener('click', () => { autoSort(); showToast('Nach Issue-Nummer sortiert'); });
+
+// ─────────────────────────────────────────────────────────
+// OPEN ISSUE
+// ─────────────────────────────────────────────────────────
+async function openIssue(idx) {
+  state.fileIndex = idx;
+  const entry = state.files[idx];
+
+  // Need to load? Show preload screen.
+  if (!Array.isArray(entry.pageCache)) {
+    landing.style.display = 'none';
+    reader.style.display  = 'none';
+    preloadTitle.textContent = entry.name;
+    preloadBar.style.width   = entry.pageCache === LOADING ? '5%' : '0%';
+    preloadLabel.textContent = entry.pageCache === LOADING ? 'Hintergrund-Laden läuft…' : 'Öffne PDF…';
+    preloadScreen.classList.add('show');
+
+    await loadIssueCache(idx, (cur, total) => {
+      preloadBar.style.width   = Math.round((cur / total) * 100) + '%';
+      preloadLabel.textContent = `Seite ${cur} / ${total}`;
+    });
+
+    preloadScreen.classList.remove('show');
+  }
+
+  state.totalPages = entry.pageCache.length;
+  state.pageNum    = 1;
+  landing.style.display = 'none';
+  reader.style.display  = 'flex';
+  issuesBtn.style.display = state.files.length >= 1 ? 'block' : 'none';
+  issueTitle.textContent = entry.name;
+  resetZoom(false);
+  updateIssueList();
+  updatePreloadStrip();
+  await displayPage(1);
+
+  // Kick off background loading of next 4
+  backgroundLoadAhead(idx);
+  // Evict issues outside the keep window
+  manageCacheWindow(idx);
+}
+
+// ─────────────────────────────────────────────────────────
+// DISPLAY PAGE (instant from cache)
+// ─────────────────────────────────────────────────────────
+async function displayPage(num, dir) {
+  if (state.rendering) { state.pendingPage = num; return; }
+  state.rendering = true;
+  state.pageNum   = num;
+
+  const src = state.files[state.fileIndex].pageCache[num - 1];
+  if (!src) pageSpinner.classList.add('show');
+
+  const wrapW = wrapper.clientWidth;
+  const wrapH = wrapper.clientHeight - 2;
+  const sc    = Math.min(wrapW / src.width, wrapH / src.height);
+
+  canvas.width        = src.width;
+  canvas.height       = src.height;
+  canvas.style.width  = Math.floor(src.width  * sc) + 'px';
+  canvas.style.height = Math.floor(src.height * sc) + 'px';
+  ctx.drawImage(src, 0, 0);
+
+  pageSpinner.classList.remove('show');
+  canvas.classList.remove('flip-left', 'flip-right');
+  void canvas.offsetWidth;
+  if (dir === 'next') canvas.classList.add('flip-left');
+  if (dir === 'prev') canvas.classList.add('flip-right');
+
+  updateUI();
+  savePosition();
+  state.rendering = false;
+  if (state.pendingPage !== null) { const p = state.pendingPage; state.pendingPage = null; displayPage(p); }
+}
+
+function updateUI() {
+  const { pageNum, totalPages, fileIndex, files } = state;
+  pageCounter.textContent  = `${pageNum} / ${totalPages}`;
+  prevBtn.disabled         = pageNum <= 1 && fileIndex <= 0;
+  nextBtn.disabled         = pageNum >= totalPages && fileIndex >= files.length - 1;
+  progressFill.style.width = `${(pageNum / totalPages) * 100}%`;
+}
+
+// ─────────────────────────────────────────────────────────
+// NAVIGATION
+// ─────────────────────────────────────────────────────────
+prevBtn.addEventListener('click', goBack);
+nextBtn.addEventListener('click', goForward);
+$('close-btn').addEventListener('click', () => { reader.style.display='none'; landing.style.display='flex'; });
+zoomReset.addEventListener('click', () => resetZoom(true));
+// Fix: wrapper captures all touch events, so button needs its own handler
+zoomReset.addEventListener('touchend', e => { e.stopPropagation(); e.preventDefault(); resetZoom(true); }, { passive: false });
+$('zoom-in-btn').addEventListener('click',  () => zoomTo(zoom.scale * 1.4, 0, 0, true));
+$('zoom-out-btn').addEventListener('click', () => zoomTo(zoom.scale / 1.4, 0, 0, true));
+
+async function goForward() {
+  if (zoom.scale > 1.01) return;
+  if (state.pageNum < state.totalPages) {
+    displayPage(state.pageNum + 1, 'next');
+  } else if (state.fileIndex < state.files.length - 1) {
+    // Auto-advance to next issue
+    const nextIdx = state.fileIndex + 1;
+    // If next issue is already loaded → instant switch, no blocking screen
+    if (Array.isArray(state.files[nextIdx].pageCache)) {
+      state.fileIndex  = nextIdx;
+      state.totalPages = state.files[nextIdx].pageCache.length;
+      state.pageNum    = 1;
+      issueTitle.textContent = state.files[nextIdx].name;
+      resetZoom(false);
+      updateIssueList();
+      updatePreloadStrip();
+      displayPage(1, 'next');
+      backgroundLoadAhead(nextIdx);
+      manageCacheWindow(nextIdx);
+    } else {
+      await openIssue(nextIdx);
+    }
+  }
+}
+
+async function goBack() {
+  if (zoom.scale > 1.01) return;
+  if (state.pageNum > 1) {
+    displayPage(state.pageNum - 1, 'prev');
+  } else if (state.fileIndex > 0) {
+    const prevIdx = state.fileIndex - 1;
+    if (Array.isArray(state.files[prevIdx].pageCache)) {
+      state.fileIndex  = prevIdx;
+      state.totalPages = state.files[prevIdx].pageCache.length;
+      state.pageNum    = state.totalPages;
+      issueTitle.textContent = state.files[prevIdx].name;
+      resetZoom(false);
+      updateIssueList();
+      updatePreloadStrip();
+      displayPage(state.totalPages, 'prev');
+      manageCacheWindow(prevIdx);
+    } else {
+      await openIssue(prevIdx);
+      displayPage(state.totalPages, 'prev');
+    }
+  }
+}
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (reader.style.display === 'none') return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goForward();
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   goBack();
+  if (e.key === 'Escape' && zoom.scale > 1) resetZoom(true);
+  if (e.key === '+' || e.key === '=') zoomTo(zoom.scale * 1.3, 0, 0, true);
+  if (e.key === '-') zoomTo(zoom.scale / 1.3, 0, 0, true);
+  if (e.key === '0') resetZoom(true);
+});
+
+// Scroll-wheel zoom
+wrapper.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect  = wrapper.getBoundingClientRect();
+  const ox    = e.clientX - rect.left - rect.width  / 2 - zoom.x;
+  const oy    = e.clientY - rect.top  - rect.height / 2 - zoom.y;
+  zoomTo(zoom.scale * (e.deltaY < 0 ? 1.12 : 1/1.12), ox, oy);
+}, { passive: false });
+
+// Progress bar
+$('progress-bar').addEventListener('click', e => {
+  const r = e.currentTarget.getBoundingClientRect();
+  const p = Math.max(1, Math.min(state.totalPages, Math.round(((e.clientX - r.left) / r.width) * state.totalPages)));
+  resetZoom(false); displayPage(p);
+});
+
+// ─────────────────────────────────────────────────────────
+// TOUCH: swipe + pinch + pan + double-tap
+// ─────────────────────────────────────────────────────────
+let touches = {}, pinchStart = null, dragStart = null, tapTimer = null, tapCount = 0;
+
+function midpoint(a,b) { return { x:(a.clientX+b.clientX)/2, y:(a.clientY+b.clientY)/2 }; }
+function tdist(a,b)    { return Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY); }
+
+wrapper.addEventListener('touchstart', e => {
+  e.preventDefault();
+  [...e.changedTouches].forEach(t => touches[t.identifier] = t);
+  const ids = Object.keys(touches);
+  if (ids.length === 2) {
+    const [a,b] = [touches[ids[0]], touches[ids[1]]];
+    const mid   = midpoint(a,b);
+    const rect  = wrapper.getBoundingClientRect();
+    pinchStart = {
+      dist: tdist(a,b),
+      originX: mid.x - rect.left - rect.width/2 - zoom.x,
+      originY: mid.y - rect.top  - rect.height/2 - zoom.y,
+      scaleStart: zoom.scale, xStart: zoom.x, yStart: zoom.y,
+    };
+    dragStart = null; clearTimeout(tapTimer); tapCount = 0;
+  } else if (ids.length === 1) {
+    const t = touches[ids[0]];
+    dragStart = { x:t.clientX, y:t.clientY, zx:zoom.x, zy:zoom.y, time:Date.now() };
+    pinchStart = null;
+  }
+}, { passive:false });
+
+wrapper.addEventListener('touchmove', e => {
+  e.preventDefault();
+  [...e.changedTouches].forEach(t => touches[t.identifier] = t);
+  const ids = Object.keys(touches);
+  if (ids.length >= 2 && pinchStart) {
+    const [a,b]    = [touches[ids[0]], touches[ids[1]]];
+    const newScale = Math.max(zoom.MIN, Math.min(zoom.MAX, pinchStart.scaleStart * (tdist(a,b) / pinchStart.dist)));
+    const mid      = midpoint(a,b);
+    const rect     = wrapper.getBoundingClientRect();
+    const midX     = mid.x - rect.left - rect.width/2;
+    const midY     = mid.y - rect.top  - rect.height/2;
+    zoom.scale = newScale;
+    zoom.x = pinchStart.xStart + (midX - (pinchStart.originX + pinchStart.xStart));
+    zoom.y = pinchStart.yStart + (midY - (pinchStart.originY + pinchStart.yStart));
+    applyTransform();
+  } else if (ids.length === 1 && dragStart && zoom.scale > 1.01) {
+    const t = touches[ids[0]];
+    zoom.x = dragStart.zx + (t.clientX - dragStart.x);
+    zoom.y = dragStart.zy + (t.clientY - dragStart.y);
+    applyTransform();
+  }
+}, { passive:false });
+
+wrapper.addEventListener('touchend', e => {
+  e.preventDefault();
+  [...e.changedTouches].forEach(t => delete touches[t.identifier]);
+  const remaining = Object.keys(touches).length;
+
+  if (remaining === 0) {
+    const t = e.changedTouches[0];
+    // Double-tap detection
+    if (dragStart && Date.now()-dragStart.time < 250 &&
+        Math.abs(t.clientX-dragStart.x) < 12 && Math.abs(t.clientY-dragStart.y) < 12) {
+      tapCount++;
+      if (tapCount === 1) {
+        tapTimer = setTimeout(() => { tapCount = 0; }, 300);
+      } else {
+        clearTimeout(tapTimer); tapCount = 0;
+        const rect = wrapper.getBoundingClientRect();
+        const ox = t.clientX - rect.left - rect.width/2 - zoom.x;
+        const oy = t.clientY - rect.top  - rect.height/2 - zoom.y;
+        zoom.scale > 1.2 ? resetZoom(true) : zoomTo(2.5, ox, oy, true);
+        dragStart = null; return;
+      }
+    }
+    // Swipe (only when not zoomed)
+    if (dragStart && zoom.scale <= 1.01) {
+      const dx = t.clientX - dragStart.x;
+      const dy = t.clientY - dragStart.y;
+      const dt = Date.now() - dragStart.time;
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40 && dt < 400) {
+        dx < 0 ? goForward() : goBack();
+      }
+    }
+    if (zoom.scale < 1.05 && zoom.scale > 1) resetZoom(true);
+    pinchStart = null; dragStart = null;
+  } else if (remaining === 1) {
+    pinchStart = null;
+    const id = Object.keys(touches)[0];
+    const t  = touches[id];
+    dragStart = { x:t.clientX, y:t.clientY, zx:zoom.x, zy:zoom.y, time:Date.now() };
+  }
+}, { passive:false });
+
+// ─────────────────────────────────────────────────────────
+// ZOOM HELPERS
+// ─────────────────────────────────────────────────────────
+let badgeTimer = null;
+function applyTransform(smooth = false) {
+  clampPan();
+  if (smooth) { zoomLayer.classList.add('smooth'); setTimeout(() => zoomLayer.classList.remove('smooth'), 260); }
+  zoomLayer.style.transform = `translate(${zoom.x}px,${zoom.y}px) scale(${zoom.scale})`;
+  zoomBadge.textContent = zoom.scale.toFixed(zoom.scale % 1 === 0 ? 0 : 1) + '×';
+  const zoomed = zoom.scale > 1.01;
+  zoomBadge.classList.add('show');
+  zoomReset.classList.toggle('show', zoomed);
+  clearTimeout(badgeTimer);
+  badgeTimer = setTimeout(() => { if (!zoomed) zoomBadge.classList.remove('show'); }, 900);
+}
+function clampPan() {
+  if (zoom.scale <= 1) { zoom.x=0; zoom.y=0; return; }
+  const maxX = Math.max(0, (canvas.offsetWidth  * zoom.scale - wrapper.clientWidth)  / 2);
+  const maxY = Math.max(0, (canvas.offsetHeight * zoom.scale - wrapper.clientHeight) / 2);
+  zoom.x = Math.max(-maxX, Math.min(maxX, zoom.x));
+  zoom.y = Math.max(-maxY, Math.min(maxY, zoom.y));
+}
+function zoomTo(newScale, ox, oy, smooth=false) {
+  newScale = Math.max(zoom.MIN, Math.min(zoom.MAX, newScale));
+  const ratio = newScale / zoom.scale;
+  zoom.x = ox + (zoom.x - ox) * ratio;
+  zoom.y = oy + (zoom.y - oy) * ratio;
+  zoom.scale = newScale;
+  applyTransform(smooth);
+}
+function resetZoom(smooth=true) { zoom.scale=1; zoom.x=0; zoom.y=0; applyTransform(smooth); }
+
+// ─────────────────────────────────────────────────────────
+// ISSUE MODAL
+// ─────────────────────────────────────────────────────────
+issuesBtn.addEventListener('click', () => { updateIssueList(); updatePreloadStrip(); issueModal.classList.add('open'); });
+issueModal.addEventListener('click', e => { if (e.target === issueModal) issueModal.classList.remove('open'); });
+
+let dragSrcIdx = null;
+
+function updateIssueList() {
+  issueList.innerHTML = '';
+  state.files.forEach((f, i) => {
+    const item = document.createElement('div');
+    item.className = 'issue-item' + (i === state.fileIndex ? ' active' : '');
+    item.draggable = true;
+
+    const handle = document.createElement('span');
+    handle.className = 'drag-handle'; handle.textContent = '⠿';
+
+    const num = document.createElement('span');
+    num.className = 'issue-num';
+    num.textContent = f.issueNum < 9999 ? String(f.issueNum).padStart(3,'0') : i+1;
+
+    const name = document.createElement('span');
+    name.className = 'issue-name'; name.textContent = f.name;
+
+    const statusEl = document.createElement('span');
+    if (Array.isArray(f.pageCache)) {
+      statusEl.className = 'issue-loaded'; statusEl.textContent = '✓';
+    } else if (f.pageCache === LOADING) {
+      statusEl.className = 'issue-loading'; statusEl.textContent = '⟳';
+    }
+
+    const del = document.createElement('button');
+    del.className = 'issue-delete'; del.textContent = '✕';
+    del.addEventListener('click', e => { e.stopPropagation(); removeIssue(i); });
+
+    item.append(handle, num, name, statusEl, del);
+    item.addEventListener('click', () => {
+      issueModal.classList.remove('open');
+      if (i !== state.fileIndex) openIssue(i);
+    });
+
+    item.addEventListener('dragstart', e => { dragSrcIdx=i; e.dataTransfer.effectAllowed='move'; setTimeout(()=>item.classList.add('dragging'),0); });
+    item.addEventListener('dragend',   () => { item.classList.remove('dragging'); document.querySelectorAll('.issue-item').forEach(el=>el.classList.remove('drag-over-item')); });
+    item.addEventListener('dragover',  e => { e.preventDefault(); e.dataTransfer.dropEffect='move'; document.querySelectorAll('.issue-item').forEach(el=>el.classList.remove('drag-over-item')); if(i!==dragSrcIdx) item.classList.add('drag-over-item'); });
+    item.addEventListener('drop', e => {
+      e.preventDefault();
+      if (dragSrcIdx===null || dragSrcIdx===i) return;
+      const moved = state.files.splice(dragSrcIdx,1)[0];
+      state.files.splice(i,0,moved);
+      if      (state.fileIndex===dragSrcIdx)                        state.fileIndex=i;
+      else if (state.fileIndex>dragSrcIdx && state.fileIndex<=i)    state.fileIndex--;
+      else if (state.fileIndex<dragSrcIdx && state.fileIndex>=i)    state.fileIndex++;
+      dragSrcIdx=null; updateIssueList(); updatePreloadStrip();
+    });
+
+    issueList.appendChild(item);
+  });
+
+  // Scroll active item into view
+  setTimeout(() => {
+    const active = issueList.querySelector('.issue-item.active');
+    if (active) active.scrollIntoView({ block:'center', behavior:'smooth' });
+  }, 50);
+}
+
+function updatePreloadStrip() {
+  preloadStrip.innerHTML = '';
+  if (state.files.length === 0) return;
+
+  const label = document.createElement('span');
+  label.className = 'preload-dot-label'; label.textContent = 'Cache:';
+  preloadStrip.appendChild(label);
+
+  const start = Math.max(0, state.fileIndex - 1);
+  const end   = Math.min(state.files.length - 1, state.fileIndex + AHEAD + 1);
+
+  for (let i = start; i <= end; i++) {
+    const dot = document.createElement('div');
+    dot.title = state.files[i].name;
+    if (i === state.fileIndex) {
+      dot.className = 'preload-dot current';
+    } else if (Array.isArray(state.files[i].pageCache)) {
+      dot.className = 'preload-dot loaded';
+    } else if (state.files[i].pageCache === LOADING) {
+      dot.className = 'preload-dot loading';
+    } else {
+      dot.className = 'preload-dot';
+    }
+    preloadStrip.appendChild(dot);
+  }
+}
+
+function removeIssue(idx) {
+  if (state.files.length === 1) { showToast('Mindestens ein Issue nötig'); return; }
+  const entry = state.files[idx];
+  dbRemove(entry.name);
+  dbDeletePages(entry.name, Array.isArray(entry.pageCache) ? entry.pageCache.length : 0);
+  state.files.splice(idx, 1);
+  if (state.fileIndex >= state.files.length) state.fileIndex = state.files.length - 1;
+  updateIssueList(); updatePreloadStrip(); showToast('Issue entfernt');
+}
+
+// ─────────────────────────────────────────────────────────
+// TOAST
+// ─────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 20px;border-radius:24px;font-size:13px;z-index:300;white-space:nowrap;animation:fadeUp .2s ease-out;font-family:Inter,sans-serif;';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2200);
+}
+
+// ─────────────────────────────────────────────────────────
+// APP ICON + DYNAMIC MANIFEST
+// ─────────────────────────────────────────────────────────
+const iconInput       = $('icon-input');
+const iconPreview     = $('icon-preview');
+const iconPlaceholder = $('icon-placeholder');
+
+let currentIconDataUrl = null;
+
+function applyIcon(dataUrl) {
+  currentIconDataUrl = dataUrl;
+  iconPlaceholder.style.display = 'none';
+  // Remove old img if any
+  const old = iconPreview.querySelector('img');
+  if (old) old.remove();
+  const img = document.createElement('img');
+  img.src = dataUrl;
+  iconPreview.appendChild(img);
+  updateDynamicManifest(dataUrl);
+}
+
+function updateDynamicManifest(iconDataUrl) {
+  const manifest = {
+    name: 'Invincible Reader',
+    short_name: 'Invincible',
+    description: 'Comic Reader für Invincible Issues',
+    start_url: window.location.href,
+    display: 'fullscreen',
+    orientation: 'portrait',
+    background_color: '#080808',
+    theme_color: '#e8c840',
+    icons: iconDataUrl ? [
+      { src: iconDataUrl, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+      { src: iconDataUrl, sizes: '192x192', type: 'image/png', purpose: 'any maskable' }
+    ] : []
+  };
+  const blob    = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+  const blobUrl = URL.createObjectURL(blob);
+  let link = document.querySelector('link[rel="manifest"]');
+  if (!link) { link = document.createElement('link'); link.rel = 'manifest'; document.head.appendChild(link); }
+  link.href = blobUrl;
+}
+
+iconInput.addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  // Resize to 512×512 for efficiency
+  const bmp  = await createImageBitmap(file);
+  const off  = document.createElement('canvas');
+  off.width  = 512; off.height = 512;
+  const octx = off.getContext('2d');
+  // Cover crop
+  const s = Math.min(bmp.width, bmp.height);
+  const sx = (bmp.width  - s) / 2;
+  const sy = (bmp.height - s) / 2;
+  octx.drawImage(bmp, sx, sy, s, s, 0, 0, 512, 512);
+  const dataUrl = off.toDataURL('image/png');
+  applyIcon(dataUrl);
+  // Persist icon in DB under special key
+  try {
+    const tx = db.transaction('issues', 'readwrite');
+    tx.objectStore('issues').put({ name: '__icon__', issueNum: -1, arrayBuffer: new TextEncoder().encode(dataUrl).buffer });
+  } catch(e) {}
+  showToast('Icon gespeichert ✓');
+});
+
+// ─────────────────────────────────────────────────────────
+// INDEXEDDB PERSISTENCE
+// Saves arrayBuffers so issues survive app restarts.
+// pageCache is NOT saved (re-rendered on load).
+// ─────────────────────────────────────────────────────────
+let db = null;
+const DB_NAME = 'invincible-v1', DB_STORE = 'issues', PAGE_STORE = 'pages';
+
+function openDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, 2);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains(DB_STORE))   d.createObjectStore(DB_STORE, { keyPath: 'name' });
+      if (!d.objectStoreNames.contains(PAGE_STORE)) d.createObjectStore(PAGE_STORE, { keyPath: 'id' });
+    };
+    req.onsuccess = e => res(e.target.result);
+    req.onerror   = e => rej(e.target.error);
+  });
+}
+function dbSave(entry) {
+  if (!db) return;
+  try {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    tx.objectStore(DB_STORE).put({ name: entry.name, issueNum: entry.issueNum, arrayBuffer: entry.arrayBuffer });
+  } catch(e) {}
+}
+function dbRemove(name) {
+  if (!db) return;
+  try {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    tx.objectStore(DB_STORE).delete(name);
+  } catch(e) {}
+}
+function dbGetAll() {
+  return new Promise((res, rej) => {
+    const req = db.transaction(DB_STORE, 'readonly').objectStore(DB_STORE).getAll();
+    req.onsuccess = e => res(e.target.result || []);
+    req.onerror   = e => rej(e.target.error);
+  });
+}
+
+// ── Page cache in DB ──────────────────────────────────────
+async function dbSavePage(issueName, idx, bitmap) {
+  if (!db) return;
+  try {
+    const off  = document.createElement('canvas');
+    off.width  = bitmap.width; off.height = bitmap.height;
+    off.getContext('2d').drawImage(bitmap, 0, 0);
+    const blob = await new Promise(r => off.toBlob(r, 'image/webp', 0.95));
+    if (!blob) return;
+    const tx = db.transaction(PAGE_STORE, 'readwrite');
+    tx.objectStore(PAGE_STORE).put({ id: `${issueName}::${idx}`, blob });
+  } catch(e) {}
+}
+
+async function dbLoadPages(issueName, total) {
+  if (!db) return null;
+  try {
+    const tx    = db.transaction(PAGE_STORE, 'readonly');
+    const store = tx.objectStore(PAGE_STORE);
+    const cache = [];
+    for (let i = 0; i < total; i++) {
+      const row = await new Promise(r => {
+        const req = store.get(`${issueName}::${i}`);
+        req.onsuccess = e => r(e.target.result);
+        req.onerror   = () => r(null);
+      });
+      if (!row) return null;
+      cache.push(await createImageBitmap(row.blob));
+    }
+    return cache;
+  } catch(e) { return null; }
+}
+
+async function dbDeletePages(issueName, total) {
+  if (!db) return;
+  try {
+    const tx    = db.transaction(PAGE_STORE, 'readwrite');
+    const store = tx.objectStore(PAGE_STORE);
+    for (let i = 0; i < (total || 200); i++) store.delete(`${issueName}::${i}`);
+  } catch(e) {}
+}
+
+// ── Cache window manager ──────────────────────────────────
+// Keeps: [idx-2, idx-1, idx, idx+1, idx+2, idx+3, idx+4]
+// Evicts all others from DB and in-memory to save storage.
+async function manageCacheWindow(activeIdx) {
+  const keep = new Set();
+  for (let i = activeIdx - 2; i <= activeIdx + 4; i++) {
+    if (i >= 0 && i < state.files.length) keep.add(i);
+  }
+  for (let i = 0; i < state.files.length; i++) {
+    if (keep.has(i)) continue;
+    const entry = state.files[i];
+    // Evict in-memory cache
+    if (Array.isArray(entry.pageCache)) {
+      const pageCount = entry.pageCache.length;
+      entry.pageCache = UNLOADED;
+      // Evict from DB
+      dbDeletePages(entry.name, pageCount).catch(() => {});
+    }
+  }
+}
+
+// ── Reading position ──────────────────────────────────────
+function savePosition() {
+  const entry = state.files[state.fileIndex];
+  if (!entry) return;
+  try { localStorage.setItem('inv-pos', JSON.stringify({ name: entry.name, page: state.pageNum })); } catch(e) {}
+}
+function loadPosition() {
+  try { return JSON.parse(localStorage.getItem('inv-pos')); } catch(e) { return null; } 
+}
+
+// Restore saved issues on startup
+(async () => {
+  try {
+    db = await openDB();
+    const all = await dbGetAll();
+
+    // Restore icon
+    const iconEntry = all.find(f => f.name === '__icon__');
+    if (iconEntry) applyIcon(new TextDecoder().decode(iconEntry.arrayBuffer));
+
+    const saved = all.filter(f => f.name !== '__icon__');
+    if (!saved.length) return;
+
+    saved.sort((a,b) => a.issueNum - b.issueNum);
+    for (const f of saved) {
+      state.files.push({ name: f.name, issueNum: f.issueNum, arrayBuffer: f.arrayBuffer, pageCache: UNLOADED });
+    }
+
+    // Show resume button with saved position
+    const pos    = loadPosition();
+    const posIdx = pos ? state.files.findIndex(f => f.name === pos.name) : 0;
+    const target = posIdx >= 0 ? posIdx : 0;
+    const tEntry = state.files[target];
+    const tPage  = (posIdx >= 0 && pos) ? pos.page : 1;
+
+    // Check if pages are already cached in DB
+    const pdf   = await pdfjsLib.getDocument({ data: tEntry.arrayBuffer.slice(0) }).promise;
+    const total = pdf.numPages;
+    const isCached = await dbLoadPages(tEntry.name, total).then(c => !!c).catch(() => false);
+
+    const resumeBtn   = $('resume-btn');
+    const orDivider   = $('or-divider');
+    $('resume-btn-title').textContent  = tEntry.name;
+    $('resume-btn-page').textContent   = `Seite ${tPage} von ${total}`;
+    $('resume-btn-cached').textContent = isCached ? '⚡ Sofort bereit' : '⟳ Wird beim Öffnen geladen';
+    resumeBtn.style.display = 'flex';
+    orDivider.style.display = 'block';
+
+    resumeBtn.addEventListener('click', async () => {
+      await openIssue(target);
+      if (tPage > 1) displayPage(Math.min(tPage, state.totalPages));
+    }, { once: true });
+
+  } catch(e) { console.warn('DB restore failed', e); }
+})();
+</script>
+</body>
+</html>
